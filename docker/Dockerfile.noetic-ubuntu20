@@ -1,0 +1,58 @@
+FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_VERSION=noetic
+ENV CATKIN_WS=/workspace/agile_autonomy_ws/catkin_aa
+ENV CONDA_DIR=/opt/conda
+ENV PATH=${CONDA_DIR}/bin:${PATH}
+SHELL ["/bin/bash", "-c"]
+
+# Base system tools and ROS repository
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget git ca-certificates gnupg2 lsb-release locales \
+    build-essential cmake pkg-config software-properties-common \
+    python3-pip python3-dev python3-vcstool python3-catkin-tools \
+    libqglviewer-dev-qt5 libzmqpp-dev libeigen3-dev libglfw3-dev libglm-dev \
+    libvulkan1 vulkan-utils gdb libopencv-dev \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu focal main" > /etc/apt/sources.list.d/ros1-latest.list' \
+    && curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ros-noetic-desktop-full \
+       ros-noetic-cv-bridge \
+       ros-noetic-image-transport \
+       ros-noetic-gazebo-msgs \
+       ros-noetic-mavros-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 3.7 environment for the original TensorFlow 2.4 code.
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-py39_24.1.2-0-Linux-x86_64.sh -O /tmp/miniconda.sh \
+    && bash /tmp/miniconda.sh -b -p ${CONDA_DIR} \
+    && rm /tmp/miniconda.sh \
+    && conda update -y -n base -c defaults conda \
+    && conda create -y -n tf_24 python=3.7 \
+    && conda clean -afy
+
+RUN source ${CONDA_DIR}/etc/profile.d/conda.sh \
+    && conda activate tf_24 \
+    && pip install --no-cache-dir \
+       tensorflow-gpu==2.4 \
+       rospkg==1.2.3 \
+       pyquaternion \
+       open3d \
+       opencv-python \
+       pyyaml \
+       numpy
+
+RUN echo "source /opt/ros/noetic/setup.bash" >> /root/.bashrc \
+    && echo "source ${CONDA_DIR}/etc/profile.d/conda.sh" >> /root/.bashrc \
+    && echo "conda activate tf_24" >> /root/.bashrc
+
+WORKDIR /workspace
+CMD ["/bin/bash"]
